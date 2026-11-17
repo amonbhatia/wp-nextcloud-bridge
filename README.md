@@ -76,7 +76,7 @@ Embed the file browser on any page or post:
 | `create_folder` | `true` | Allow creating new folders |
 | `delete` | `false` | Allow deleting files/folders |
 
-> **Note:** The shortcode is only visible to users with `manage_options` capability (administrators).
+> **Note:** Administrators (`manage_options`) get the full browser. Everyone else, including logged-out visitors, gets a **read-only** browser (browse + download only) restricted to the shortcode's `path`. A shortcode without `path` is shown to administrators only, so the whole Nextcloud account is never exposed publicly.
 
 ### Admin Pages
 

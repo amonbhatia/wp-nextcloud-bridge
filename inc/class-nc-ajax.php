@@ -45,6 +45,9 @@ class NC_Ajax {
 
         // Public proxy for viewing shared files (no login needed).
         add_action( 'wp_ajax_nopriv_wpnc_download_proxy', array( $this, 'handle_download_proxy' ) );
+
+        // Public read-only browsing, restricted to a signed shortcode scope.
+        add_action( 'wp_ajax_nopriv_wpnc_browse', array( $this, 'handle_browse' ) );
     }
 
     /* ================================================================
@@ -86,18 +89,41 @@ class NC_Ajax {
     /**
      * Browse: list the contents of a Nextcloud folder.
      *
-     * Input:  path (string, optional)
+     * Admins may browse any path. Everyone else (incl. logged-out visitors)
+     * must send a signed scope (from the shortcode) and may only browse
+     * inside it; file items then carry a tokenized `download_url`.
+     *
+     * Input:  path (string, optional), scope + scope_sig (non-admins)
      * Output: items[] — each with name, type, size, mime, fileid
      */
     public function handle_browse() {
-        $this->verify_admin_request();
+        $path      = $this->input( 'path', '' );
+        $read_only = ! current_user_can( self::CAPABILITY );
 
-        $path   = $this->input( 'path', '' );
+        if ( $read_only ) {
+            $scope = $this->input( 'scope', '' );
+            if ( ! self::verify_scope( $scope, $this->input( 'scope_sig' ) )
+                || ! self::path_in_scope( $path, $scope ) ) {
+                wp_send_json_error( __( 'Permission denied.', 'wp-nc-bridge' ), 403 );
+            }
+        } else {
+            $this->verify_admin_request();
+        }
+
         $client = $this->client_or_die();
 
         $items = $client->list_folder( $path );
         if ( is_wp_error( $items ) ) {
             wp_send_json_error( $items->get_error_message() );
+        }
+
+        if ( $read_only ) {
+            foreach ( $items as &$item ) {
+                if ( ( $item['type'] ?? '' ) === 'file' ) {
+                    $item['download_url'] = self::public_download_url( trim( $path, '/' ) . '/' . $item['name'] );
+                }
+            }
+            unset( $item );
         }
 
         wp_send_json_success( array(
@@ -582,6 +608,64 @@ class NC_Ajax {
         $expected_hmac    = hash_hmac( 'sha256', $expected_payload, wp_salt( 'auth' ) );
 
         return hash_equals( $expected_hmac, $hmac );
+    }
+
+    /**
+     * Build a tokenized download-proxy URL for read-only (public) access.
+     *
+     * @param string $path  Remote file path.
+     * @return string
+     */
+    public static function public_download_url( string $path ): string {
+        // Sign exactly what handle_download_proxy() will verify.
+        $path = sanitize_text_field( ltrim( $path, '/' ) );
+
+        return admin_url( 'admin-ajax.php' ) . '?' . http_build_query( array(
+            'action'      => 'wpnc_download_proxy',
+            'path'        => $path,
+            '_wpnc_token' => self::generate_download_token( $path ),
+        ), '', '&', PHP_QUERY_RFC3986 );
+    }
+
+    /* ================================================================
+     *  BROWSE SCOPE (for read-only / public browsing)
+     * ============================================================= */
+
+    /**
+     * Sign a shortcode base path so visitors cannot widen it.
+     *
+     * @param string $scope  Base path the visitor may browse.
+     * @return string  HMAC signature.
+     */
+    public static function sign_scope( string $scope ): string {
+        return hash_hmac( 'sha256', 'wpnc_scope|' . trim( $scope, '/' ), wp_salt( 'auth' ) );
+    }
+
+    /**
+     * Verify a scope signature.
+     */
+    private static function verify_scope( string $scope, string $sig ): bool {
+        return $sig !== '' && hash_equals( self::sign_scope( $scope ), $sig );
+    }
+
+    /**
+     * Whether $path equals $scope or lies below it (no traversal allowed).
+     */
+    private static function path_in_scope( string $path, string $scope ): bool {
+        $path  = trim( $path, '/' );
+        $scope = trim( $scope, '/' );
+
+        foreach ( preg_split( '#[/\\\\]#', $path ) as $segment ) {
+            if ( $segment === '.' || $segment === '..' ) {
+                return false;
+            }
+        }
+
+        if ( $scope === '' ) {
+            return false;
+        }
+
+        return $path === $scope || strpos( $path, $scope . '/' ) === 0;
     }
 
     /* ================================================================

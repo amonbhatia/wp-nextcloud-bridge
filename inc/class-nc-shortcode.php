@@ -3,7 +3,9 @@
  * Frontend Shortcode: [nextcloud]
  *
  * Renders a file browser + uploader on any page/post.
- * Only accessible to users with the configured capability.
+ * Users with the configured capability get full access. Everyone else
+ * (including logged-out visitors) gets a read-only browser restricted
+ * to the shortcode's `path`.
  *
  * Usage:
  *   [nextcloud]                          — browse from NC root
@@ -46,10 +48,8 @@ class NC_Shortcode {
      * @return string  HTML output.
      */
     public function render( $atts ): string {
-        // Permission gate — show nothing to unauthorised users.
-        if ( ! current_user_can( self::CAPABILITY ) ) {
-            return '<p class="wpnc-noaccess">' . esc_html__( 'You do not have permission to access this file browser.', 'wp-nc-bridge' ) . '</p>';
-        }
+        // Admins get full access; everyone else (incl. logged-out visitors) gets read-only.
+        $can_manage = current_user_can( self::CAPABILITY );
 
         $atts = shortcode_atts( array(
             'path'          => '',
@@ -62,7 +62,17 @@ class NC_Shortcode {
         $allow_upload = filter_var( $atts['upload'], FILTER_VALIDATE_BOOLEAN );
         $allow_mkdir  = filter_var( $atts['create_folder'], FILTER_VALIDATE_BOOLEAN );
         $allow_delete = filter_var( $atts['delete'], FILTER_VALIDATE_BOOLEAN );
-        $initial_path = sanitize_text_field( $atts['path'] );
+        $initial_path = trim( sanitize_text_field( $atts['path'] ), '/' );
+
+        if ( ! $can_manage ) {
+            // Never expose the whole Nextcloud account publicly — require an explicit path.
+            if ( $initial_path === '' ) {
+                return '<p class="wpnc-noaccess">' . esc_html__( 'You do not have permission to access this file browser.', 'wp-nc-bridge' ) . '</p>';
+            }
+            $allow_upload = false;
+            $allow_mkdir  = false;
+            $allow_delete = false;
+        }
 
         // Enqueue assets once per page.
         $this->enqueue_assets();
@@ -79,7 +89,12 @@ class NC_Shortcode {
              data-initial-path="<?php echo esc_attr( $initial_path ); ?>"
              data-allow-upload="<?php echo $allow_upload ? '1' : '0'; ?>"
              data-allow-mkdir="<?php echo $allow_mkdir ? '1' : '0'; ?>"
-             data-allow-delete="<?php echo $allow_delete ? '1' : '0'; ?>">
+             data-allow-delete="<?php echo $allow_delete ? '1' : '0'; ?>"
+             <?php if ( ! $can_manage ) : ?>
+             data-read-only="1"
+             data-scope="<?php echo esc_attr( $initial_path ); ?>"
+             data-scope-sig="<?php echo esc_attr( NC_Ajax::sign_scope( $initial_path ) ); ?>"
+             <?php endif; ?>>
 
             <!-- Toolbar -->
             <div class="wpnc-toolbar">

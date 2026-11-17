@@ -244,6 +244,9 @@
         this.allowUpload = el.dataset.allowUpload === '1';
         this.allowMkdir  = el.dataset.allowMkdir === '1';
         this.allowDelete = el.dataset.allowDelete === '1';
+        this.readOnly    = el.dataset.readOnly === '1';
+        this.scope       = el.dataset.scope || '';
+        this.scopeSig    = el.dataset.scopeSig || '';
         this.items       = [];
         this.uploading   = false;
 
@@ -302,7 +305,13 @@
         this.currentPath = path;
         this.showLoading();
 
-        wpncRequest('wpnc_browse', { path: path })
+        var params = { path: path };
+        if (this.readOnly) {
+            params.scope = this.scope;
+            params.scope_sig = this.scopeSig;
+        }
+
+        wpncRequest('wpnc_browse', params)
             .then(function (data) {
                 self.items = data.items || [];
                 self.renderBreadcrumb();
@@ -318,13 +327,19 @@
     FileBrowser.prototype.renderBreadcrumb = function () {
         var self = this;
         var html = '';
-        var segments = this.currentPath ? this.currentPath.split('/').filter(Boolean) : [];
+        // Read-only users can't navigate above their scope, so it acts as "Root".
+        var base = this.readOnly ? this.scope : '';
+        var rel = this.currentPath || '';
+        if (base && (rel === base || rel.indexOf(base + '/') === 0)) {
+            rel = rel.slice(base.length);
+        }
+        var segments = rel.split('/').filter(Boolean);
 
         // Root link.
-        html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="">' + escHtml(I18N.root || 'Root') + '</span>';
+        html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="' + escHtml(base) + '">' + escHtml(I18N.root || 'Root') + '</span>';
 
         // Each segment.
-        var accumulated = '';
+        var accumulated = base;
         segments.forEach(function (seg, i) {
             accumulated += (accumulated ? '/' : '') + seg;
             html += '<span class="wpnc-crumb-sep">/</span>';
@@ -401,8 +416,10 @@
             // Actions.
             html += '<td class="wpnc-col-actions">';
             if (!isFolder) {
-                html += '<button class="wpnc-action-btn" data-action="download" data-path="' + escHtml(fullPath) + '" title="' + escHtml(I18N.download || 'Download') + '">⬇️</button>';
-                html += '<button class="wpnc-action-btn" data-action="share" data-path="' + escHtml(fullPath) + '" title="' + escHtml(I18N.share || 'Share') + '">🔗</button>';
+                html += '<button class="wpnc-action-btn" data-action="download" data-path="' + escHtml(fullPath) + '"' + (item.download_url ? ' data-url="' + escHtml(item.download_url) + '"' : '') + ' title="' + escHtml(I18N.download || 'Download') + '">⬇️</button>';
+                if (!self.readOnly) {
+                    html += '<button class="wpnc-action-btn" data-action="share" data-path="' + escHtml(fullPath) + '" title="' + escHtml(I18N.share || 'Share') + '">🔗</button>';
+                }
             }
             if (self.allowDelete) {
                 html += '<button class="wpnc-action-btn wpnc-action-delete" data-action="delete" data-path="' + escHtml(fullPath) + '" data-name="' + escHtml(item.name) + '" title="' + escHtml(I18N.delete || 'Delete') + '">🗑️</button>';
@@ -428,7 +445,7 @@
                 var action = btn.dataset.action;
                 var path   = btn.dataset.path;
                 var name   = btn.dataset.name;
-                if (action === 'download') self.onDownload(path);
+                if (action === 'download') self.onDownload(path, btn.dataset.url);
                 if (action === 'share')    self.onShare(path);
                 if (action === 'delete')   self.onDelete(path, name);
             });
@@ -452,8 +469,8 @@
 
     /* ── Download ────────────────────────────────────────────── */
 
-    FileBrowser.prototype.onDownload = function (path) {
-        var url = AJAX + '?action=wpnc_download_proxy&_nonce=' + encodeURIComponent(NONCE) + '&path=' + encodeURIComponent(path);
+    FileBrowser.prototype.onDownload = function (path, tokenUrl) {
+        var url = tokenUrl || (AJAX + '?action=wpnc_download_proxy&_nonce=' + encodeURIComponent(NONCE) + '&path=' + encodeURIComponent(path));
         // Trigger download via hidden link.
         var a = document.createElement('a');
         a.href = url;

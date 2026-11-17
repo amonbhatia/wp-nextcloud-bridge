@@ -3,7 +3,7 @@
  * Plugin Name: WP Nextcloud Bridge
  * Plugin URI:  https://github.com/your-repo/wp-nextcloud-bridge
  * Description: Browse Nextcloud files from WordPress and sync local directories to Nextcloud via WebDAV.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Your Name
  * License:     GPL-2.0-or-later
  * Text Domain: wp-nc-bridge
@@ -14,7 +14,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /* ── Constants ─────────────────────────────────────────────── */
-define( 'WPNC_VERSION',    '1.0.0' );
+define( 'WPNC_VERSION',    '1.0.1' );
 define( 'WPNC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPNC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WPNC_BASENAME',   plugin_basename( __FILE__ ) );
