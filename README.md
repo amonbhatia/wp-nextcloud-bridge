@@ -88,6 +88,7 @@ Render the files of a folder as a plain HTML list (`<ul>` or `<ol>`) with downlo
 [nextcloud-list path="Documents" type="ol"]
 [nextcloud-list path="Documents" extensions="pdf,docx" show_size="true"]
 [nextcloud-list path="Reports" orderby="modified" order="desc" limit="5"]
+[nextcloud-list path="Reports" show_date="true" date_format="d.m.Y"]
 ```
 
 | Attribute | Default | Description |
@@ -99,6 +100,8 @@ Render the files of a folder as a plain HTML list (`<ul>` or `<ol>`) with downlo
 | `limit` | `0` | Maximum number of files (`0` = all) |
 | `extensions` | `""` | Comma-separated whitelist, e.g. `pdf,docx` |
 | `show_size` | `false` | Append the file size to each entry |
+| `show_date` | `false` | Append the last-modified date to each entry |
+| `date_format` | site setting | [PHP date format](https://wordpress.org/documentation/article/customize-date-and-time-format/) for `show_date`, e.g. `d.m.Y` → `18.11.2026` |
 | `class` | `""` | Extra CSS classes for the list element |
 | `start` | `""` | `ol` only: starting number |
 | `reversed` | `false` | `ol` only: count down |

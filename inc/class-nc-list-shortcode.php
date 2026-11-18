@@ -10,6 +10,7 @@
  *   [nextcloud-list path="Documents" type="ol"]           — <ol> instead of <ul>
  *   [nextcloud-list path="Documents" extensions="pdf,docx"]
  *   [nextcloud-list path="Reports" orderby="modified" order="desc" limit="5"]
+ *   [nextcloud-list path="Reports" show_date="true" date_format="d.m.Y"]
  *
  * Links go through the WordPress download proxy using time-limited tokens
  * scoped to `path`, so Nextcloud credentials are never exposed. As with
@@ -44,16 +45,18 @@ class NC_List_Shortcode {
         $can_manage = current_user_can( self::CAPABILITY );
 
         $atts = shortcode_atts( array(
-            'path'       => '',
-            'type'       => 'ul',
-            'orderby'    => 'name',
-            'order'      => 'asc',
-            'limit'      => 0,
-            'extensions' => '',
-            'show_size'  => 'false',
-            'class'      => '',
-            'start'      => '',
-            'reversed'   => 'false',
+            'path'        => '',
+            'type'        => 'ul',
+            'orderby'     => 'name',
+            'order'       => 'asc',
+            'limit'       => 0,
+            'extensions'  => '',
+            'show_size'   => 'false',
+            'show_date'   => 'false',
+            'date_format' => '',
+            'class'       => '',
+            'start'       => '',
+            'reversed'    => 'false',
         ), $atts, self::SHORTCODE );
 
         $path = trim( sanitize_text_field( $atts['path'] ), '/' );
@@ -122,7 +125,9 @@ class NC_List_Shortcode {
         }
 
         return new $class( array_merge( $atts, array(
-            'show_size' => filter_var( $atts['show_size'], FILTER_VALIDATE_BOOLEAN ),
+            'show_size'   => filter_var( $atts['show_size'], FILTER_VALIDATE_BOOLEAN ),
+            'show_date'   => filter_var( $atts['show_date'], FILTER_VALIDATE_BOOLEAN ),
+            'date_format' => sanitize_text_field( $atts['date_format'] ),
         ) ) );
     }
 

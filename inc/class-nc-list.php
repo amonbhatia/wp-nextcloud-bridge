@@ -70,7 +70,7 @@ abstract class NC_List {
     /**
      * Render a single list item.
      *
-     * @param array $item  Item with `name`, `url` and optional `size`.
+     * @param array $item  Item with `name`, `url` and optional `size` / `modified`.
      * @return string  HTML.
      */
     protected function render_item( array $item ): string {
@@ -81,7 +81,33 @@ abstract class NC_List {
             $html .= ' <span class="wpnc-list-size">(' . esc_html( size_format( (int) $item['size'] ) ) . ')</span>';
         }
 
+        if ( ! empty( $this->atts['show_date'] ) ) {
+            $html .= $this->render_date( (string) ( $item['modified'] ?? '' ) );
+        }
+
         return $html . '</li>';
+    }
+
+    /**
+     * Render the modification date using the `date_format` attribute
+     * (PHP date format, e.g. "d.m.Y"), localised to the site timezone.
+     *
+     * @param string $modified  Date string as returned by WebDAV (RFC 1123).
+     * @return string  HTML, or empty string if the date is unknown.
+     */
+    protected function render_date( string $modified ): string {
+        $timestamp = $modified !== '' ? strtotime( $modified ) : false;
+        if ( $timestamp === false ) {
+            return '';
+        }
+
+        $format = $this->atts['date_format'] ?? '';
+        if ( $format === '' ) {
+            $format = get_option( 'date_format' );
+        }
+
+        return ' <span class="wpnc-list-date">(<time datetime="' . esc_attr( gmdate( 'c', $timestamp ) ) . '">'
+            . esc_html( wp_date( $format, $timestamp ) ) . '</time>)</span>';
     }
 
     /**
