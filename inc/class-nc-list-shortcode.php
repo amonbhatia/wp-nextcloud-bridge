@@ -61,7 +61,7 @@ class NC_List_Shortcode {
 
         $path = trim( sanitize_text_field( $atts['path'] ), '/' );
 
-        if ( ! self::is_safe_path( $path ) ) {
+        if ( ! NC_Ajax::is_safe_path( $path ) ) {
             return $this->notice( __( 'Invalid path.', 'wp-nc-bridge' ) );
         }
 
@@ -91,9 +91,12 @@ class NC_List_Shortcode {
             return '<p class="wpnc-list-empty">' . esc_html__( 'No documents found.', 'wp-nc-bridge' ) . '</p>';
         }
 
-        $nonce = $can_manage ? wp_create_nonce( NC_Ajax::NONCE_ACTION ) : '';
+        // Visitors get a token scoped to `path`; admins get a nonce, which the proxy verifies for them instead.
         foreach ( $items as &$item ) {
-            $item['url'] = $this->download_url( $path === '' ? $item['name'] : $path . '/' . $item['name'], $path, $nonce );
+            $file_path   = $path === '' ? $item['name'] : $path . '/' . $item['name'];
+            $item['url'] = $can_manage
+                ? NC_Ajax::admin_download_url( $file_path )
+                : NC_Ajax::public_download_url( $file_path, $path );
         }
         unset( $item );
 
@@ -178,36 +181,6 @@ class NC_List_Shortcode {
         }
 
         return $items;
-    }
-
-    /**
-     * Build a download-proxy URL for a file.
-     *
-     * Visitors get a token scoped to the shortcode path. Admins additionally
-     * get a nonce, because the proxy verifies a nonce for them instead.
-     */
-    protected function download_url( string $file_path, string $scope, string $nonce ): string {
-        if ( $nonce === '' ) {
-            return NC_Ajax::public_download_url( $file_path, $scope );
-        }
-
-        return admin_url( 'admin-ajax.php' ) . '?' . http_build_query( array(
-            'action' => 'wpnc_download_proxy',
-            'path'   => sanitize_text_field( ltrim( $file_path, '/' ) ),
-            '_nonce' => $nonce,
-        ), '', '&', PHP_QUERY_RFC3986 );
-    }
-
-    /**
-     * Reject `.` / `..` segments so the list cannot escape its folder.
-     */
-    protected static function is_safe_path( string $path ): bool {
-        foreach ( preg_split( '#[/\\\\]#', $path ) as $segment ) {
-            if ( $segment === '.' || $segment === '..' ) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private function notice( string $message ): string {
