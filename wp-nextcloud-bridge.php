@@ -54,6 +54,9 @@ function wpnc_bootstrap() {
     // Frontend shortcode (registers [nextcloud]).
     new WPNC\NC_Shortcode();
 
+    // Frontend document list shortcode (registers [nextcloud-list]).
+    new WPNC\NC_List_Shortcode();
+
     // AJAX handlers (both admin & front for nopriv proxy)
     new WPNC\NC_Ajax();
 }

@@ -11,6 +11,7 @@ A WordPress plugin that connects your WordPress site directly to Nextcloud via W
 - **Folder Management** — Create and delete folders directly from the browser UI
 - **Directory Sync** — Sync specific WordPress directories to Nextcloud on demand (WP → NC, additive only)
 - **Shortcode** — Embed the file browser anywhere with `[nextcloud]`
+- **Document List** — Show a folder's files as a linked `<ul>`/`<ol>` with `[nextcloud-list]`
 - **Diagnostics** — Built-in diagnostic page for troubleshooting connection issues
 
 ## Requirements
@@ -78,6 +79,39 @@ Embed the file browser on any page or post:
 
 > **Note:** Administrators (`manage_options`) get the full browser. Everyone else, including logged-out visitors, gets a **read-only** browser (browse + download only) restricted to the shortcode's `path`. A shortcode without `path` is shown to administrators only, so the whole Nextcloud account is never exposed publicly.
 
+### Document List Shortcode
+
+Render the files of a folder as a plain HTML list (`<ul>` or `<ol>`) with download links — no JavaScript required:
+
+```
+[nextcloud-list path="Documents"]
+[nextcloud-list path="Documents" type="ol"]
+[nextcloud-list path="Documents" extensions="pdf,docx" show_size="true"]
+[nextcloud-list path="Reports" orderby="modified" order="desc" limit="5"]
+```
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `path` | `""` (root, admins only) | Folder whose files are listed (sub-folders are skipped) |
+| `type` | `ul` | `ul` (unordered) or `ol` (ordered) |
+| `orderby` | `name` | `name`, `modified` or `size` |
+| `order` | `asc` | `asc` or `desc` |
+| `limit` | `0` | Maximum number of files (`0` = all) |
+| `extensions` | `""` | Comma-separated whitelist, e.g. `pdf,docx` |
+| `show_size` | `false` | Append the file size to each entry |
+| `class` | `""` | Extra CSS classes for the list element |
+| `start` | `""` | `ol` only: starting number |
+| `reversed` | `false` | `ol` only: count down |
+
+Links use the download proxy with tokens scoped to `path` that expire after one hour — exclude pages using this shortcode from full-page caching. Rendering lives in `NC_List` (abstract) with `NC_Unordered_List` / `NC_Ordered_List` subclasses; further list types can be added via the `wpnc_list_types` filter:
+
+```php
+add_filter( 'wpnc_list_types', function ( $types ) {
+    $types['dl'] = My_Definition_List::class; // extends WPNC\NC_List
+    return $types;
+} );
+```
+
 ### Admin Pages
 
 - **Settings → Nextcloud Bridge** — Connection settings, test connection, file browser, manual sync
@@ -125,6 +159,10 @@ wp-nextcloud-bridge/
 │   ├── class-nc-ajax.php             # AJAX endpoint router (browse/upload/sync/share)
 │   ├── class-nc-sync.php             # WP→NC incremental sync engine
 │   ├── class-nc-shortcode.php        # [nextcloud] shortcode
+│   ├── class-nc-list-shortcode.php   # [nextcloud-list] shortcode
+│   ├── class-nc-list.php             # Abstract list renderer
+│   ├── class-nc-unordered-list.php   # <ul> renderer
+│   ├── class-nc-ordered-list.php     # <ol> renderer
 │   └── class-nc-diagnostics.php      # Diagnostic test page
 ├── assets/
 │   ├── js/
