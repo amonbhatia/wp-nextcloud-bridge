@@ -34,6 +34,10 @@
         return d.innerHTML;
     }
 
+    function escAttr(str) {
+        return escHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
     function humanSize(bytes) {
         if (bytes === 0) return '—';
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -61,7 +65,7 @@
     function formatDate(str) {
         if (!str) return '—';
         const d = new Date(str);
-        if (isNaN(d.getTime())) return str;
+        if (isNaN(d.getTime())) return escHtml(str);
         return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
              + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     }
@@ -191,7 +195,7 @@
         return showModal(container,
             '<div class="wpnc-modal-body">' +
             '  <label class="wpnc-modal-label">' + escHtml(label) + '</label>' +
-            '  <input type="text" data-modal-input class="wpnc-input" placeholder="' + escHtml(placeholder || '') + '" style="font-size:16px" />' +
+            '  <input type="text" data-modal-input class="wpnc-input" placeholder="' + escAttr(placeholder || '') + '" style="font-size:16px" />' +
             '  <div class="wpnc-modal-actions">' +
             '    <button type="button" class="wpnc-btn wpnc-btn-cancel" data-action="cancel">' + escHtml(I18N.cancel || 'Cancel') + '</button>' +
             '    <button type="button" class="wpnc-btn wpnc-btn-primary" data-action="confirm">' + escHtml(I18N.create || 'Create') + '</button>' +
@@ -336,7 +340,7 @@
         var segments = rel.split('/').filter(Boolean);
 
         // Root link.
-        html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="' + escHtml(base) + '">' + escHtml(I18N.root || 'Root') + '</span>';
+        html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="' + escAttr(base) + '">' + escHtml(I18N.root || 'Root') + '</span>';
 
         // Each segment.
         var accumulated = base;
@@ -346,7 +350,7 @@
             if (i === segments.length - 1) {
                 html += '<span class="wpnc-crumb wpnc-crumb-current">' + escHtml(seg) + '</span>';
             } else {
-                html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="' + escHtml(accumulated) + '">' + escHtml(seg) + '</span>';
+                html += '<span class="wpnc-crumb wpnc-crumb-link" data-path="' + escAttr(accumulated) + '">' + escHtml(seg) + '</span>';
             }
         });
 
@@ -393,7 +397,7 @@
             var fullPath = self.currentPath ? self.currentPath.replace(/\/$/, '') + '/' + item.name : item.name;
             var isFolder = item.type === 'folder';
 
-            html += '<tr class="wpnc-row' + (isFolder ? ' wpnc-row-folder' : ' wpnc-row-file') + '" data-path="' + escHtml(fullPath) + '" data-type="' + item.type + '">';
+            html += '<tr class="wpnc-row' + (isFolder ? ' wpnc-row-folder' : ' wpnc-row-file') + '" data-path="' + escAttr(fullPath) + '" data-type="' + escAttr(item.type) + '">';
 
             // Icon.
             html += '<td class="wpnc-col-icon"><span class="wpnc-file-icon">' + fileIcon(item) + '</span></td>';
@@ -401,7 +405,7 @@
             // Name (clickable for folders).
             html += '<td class="wpnc-col-name">';
             if (isFolder) {
-                html += '<a class="wpnc-folder-link" href="javascript:void(0)" data-nav="' + escHtml(fullPath) + '">' + escHtml(item.name) + '</a>';
+                html += '<a class="wpnc-folder-link" href="javascript:void(0)" data-nav="' + escAttr(fullPath) + '">' + escHtml(item.name) + '</a>';
             } else {
                 html += '<span class="wpnc-file-name">' + escHtml(item.name) + '</span>';
             }
@@ -416,13 +420,13 @@
             // Actions.
             html += '<td class="wpnc-col-actions">';
             if (!isFolder) {
-                html += '<button class="wpnc-action-btn" data-action="download" data-path="' + escHtml(fullPath) + '"' + (item.download_url ? ' data-url="' + escHtml(item.download_url) + '"' : '') + ' title="' + escHtml(I18N.download || 'Download') + '">⬇️</button>';
+                html += '<button class="wpnc-action-btn" data-action="download" data-path="' + escAttr(fullPath) + '"' + (item.download_url ? ' data-url="' + escAttr(item.download_url) + '"' : '') + ' title="' + escAttr(I18N.download || 'Download') + '">⬇️</button>';
                 if (!self.readOnly) {
-                    html += '<button class="wpnc-action-btn" data-action="share" data-path="' + escHtml(fullPath) + '" title="' + escHtml(I18N.share || 'Share') + '">🔗</button>';
+                    html += '<button class="wpnc-action-btn" data-action="share" data-path="' + escAttr(fullPath) + '" title="' + escAttr(I18N.share || 'Share') + '">🔗</button>';
                 }
             }
             if (self.allowDelete) {
-                html += '<button class="wpnc-action-btn wpnc-action-delete" data-action="delete" data-path="' + escHtml(fullPath) + '" data-name="' + escHtml(item.name) + '" title="' + escHtml(I18N.delete || 'Delete') + '">🗑️</button>';
+                html += '<button class="wpnc-action-btn wpnc-action-delete" data-action="delete" data-path="' + escAttr(fullPath) + '" data-name="' + escAttr(item.name) + '" title="' + escAttr(I18N.delete || 'Delete') + '">🗑️</button>';
             }
             html += '</td>';
 

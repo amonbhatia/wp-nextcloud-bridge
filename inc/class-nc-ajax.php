@@ -120,7 +120,7 @@ class NC_Ajax {
         if ( $read_only ) {
             foreach ( $items as &$item ) {
                 if ( ( $item['type'] ?? '' ) === 'file' ) {
-                    $item['download_url'] = self::public_download_url( trim( $path, '/' ) . '/' . $item['name'] );
+                    $item['download_url'] = self::public_download_url( trim( $path, '/' ) . '/' . $item['name'], $scope );
                 }
             }
             unset( $item );
@@ -218,21 +218,28 @@ class NC_Ajax {
      * Input:  path (string), nonce via _nonce
      */
     public function handle_download_proxy() {
+        $path = '';
+
         // For nopriv access we use a separate signed-token mechanism.
         // For admin access we use the standard nonce.
         if ( current_user_can( self::CAPABILITY ) ) {
             $this->verify_admin_request();
+
+            $path = $this->input( 'path' );
         } else {
             // Verify a time-limited token (generated elsewhere and appended to URL).
-            $token = sanitize_text_field( $_GET['_wpnc_token'] ?? '' );
-            $path  = sanitize_text_field( $_GET['path'] ?? '' );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- signed token used instead of nonce
+            $token = sanitize_text_field( wp_unslash( $_GET['_wpnc_token'] ?? '' ) );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- signed token used instead of nonce
+            $path  = sanitize_text_field( wp_unslash( $_GET['path'] ?? '' ) );
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- signed token used instead of nonce
+            $scope = sanitize_text_field( wp_unslash( $_GET['scope'] ?? '' ) );
 
-            if ( ! $this->verify_download_token( $token, $path ) ) {
+            if ( $path === '' || ! $this->verify_download_token( $token, $path, $scope ) || ! self::path_in_scope( $path, $scope ) ) {
                 wp_die( esc_html__( 'Invalid or expired download link.', 'wp-nc-bridge' ), 403 );
             }
         }
 
-        $path   = $this->input( 'path' );
         $client = $this->client_or_die();
 
         $content = $client->download( $path );
@@ -243,11 +250,15 @@ class NC_Ajax {
         // Guess MIME type from extension.
         $ext  = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
         $mime = wp_check_filetype( 'file.' . $ext )['type'] ?: 'application/octet-stream';
+        $filename = wp_basename( $path );
+        $filename_fallback = str_replace( array( "\r", "\n", '"' ), '', $filename );
 
         // Stream response.
         header( 'Content-Type: ' . $mime );
+        header( 'X-Content-Type-Options: nosniff' );
+        header( "Content-Security-Policy: sandbox; default-src 'none'" );
         header( 'Content-Length: ' . strlen( $content ) );
-        header( 'Content-Disposition: inline; filename="' . basename( $path ) . '"' );
+        header( 'Content-Disposition: attachment; filename="' . $filename_fallback . '"; filename*=UTF-8\'\'' . rawurlencode( $filename ) );
         header( 'Cache-Control: private, max-age=3600' );
 
         // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- binary stream
@@ -568,14 +579,20 @@ class NC_Ajax {
      * Generate a time-limited HMAC token for a specific file path.
      *
      * @param string $path    Remote file path.
+     * @param string $scope   Allowed scope path for this token.
      * @param int    $ttl     Lifetime in seconds (default 1 hour).
      * @return string  Token string.
      */
-    public static function generate_download_token( string $path, int $ttl = 3600 ): string {
+    public static function generate_download_token( string $path, string $scope, int $ttl = 3600 ): string {
         $expires = time() + $ttl;
-        $payload = $expires . '|' . $path;
+        $data = array(
+            'expires' => $expires,
+            'path'    => ltrim( trim( $path ), '/' ),
+            'scope'   => trim( $scope, '/' ),
+        );
+        $payload = wp_json_encode( $data );
         $hmac    = hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) );
-        return base64_encode( $expires . '|' . $hmac );
+        return base64_encode( $payload . '|' . $hmac );
     }
 
     /**
@@ -583,47 +600,69 @@ class NC_Ajax {
      *
      * @param string $token  Base64-encoded token.
      * @param string $path   Path that was requested.
+     * @param string $scope  Scope that was requested.
      * @return bool
      */
-    private function verify_download_token( string $token, string $path ): bool {
+    private function verify_download_token( string $token, string $path, string $scope ): bool {
         $decoded = base64_decode( $token, true );
         if ( $decoded === false ) {
             return false;
         }
 
-        $parts = explode( '|', $decoded, 2 );
-        if ( count( $parts ) !== 2 ) {
+        $sep = strrpos( $decoded, '|' );
+        if ( $sep === false ) {
             return false;
         }
 
-        list( $expires, $hmac ) = $parts;
+        $payload = substr( $decoded, 0, $sep );
+        $hmac    = substr( $decoded, $sep + 1 );
+        $data    = json_decode( $payload, true );
+        if ( ! is_array( $data ) ) {
+            return false;
+        }
+
+        $expires = (int) ( $data['expires'] ?? 0 );
+        $token_path = ltrim( trim( (string) ( $data['path'] ?? '' ) ), '/' );
+        $token_scope = trim( (string) ( $data['scope'] ?? '' ), '/' );
 
         // Expired?
-        if ( (int) $expires < time() ) {
+        if ( $expires < time() ) {
+            return false;
+        }
+
+        if ( $token_scope === '' || $token_path === '' ) {
             return false;
         }
 
         // Verify HMAC.
-        $expected_payload = $expires . '|' . $path;
-        $expected_hmac    = hash_hmac( 'sha256', $expected_payload, wp_salt( 'auth' ) );
+        $expected_hmac = hash_hmac( 'sha256', $payload, wp_salt( 'auth' ) );
+        if ( ! hash_equals( $expected_hmac, $hmac ) ) {
+            return false;
+        }
 
-        return hash_equals( $expected_hmac, $hmac );
+        $path = ltrim( trim( $path ), '/' );
+        $scope = trim( $scope, '/' );
+
+        return hash_equals( $token_path, $path ) && hash_equals( $token_scope, $scope );
     }
 
     /**
      * Build a tokenized download-proxy URL for read-only (public) access.
      *
-     * @param string $path  Remote file path.
+     * @param string $path   Remote file path.
+     * @param string $scope  Scope path allowed for this token.
      * @return string
      */
-    public static function public_download_url( string $path ): string {
+    public static function public_download_url( string $path, string $scope ): string {
         // Sign exactly what handle_download_proxy() will verify.
         $path = sanitize_text_field( ltrim( $path, '/' ) );
+        $scope = sanitize_text_field( trim( $scope, '/' ) );
 
         return admin_url( 'admin-ajax.php' ) . '?' . http_build_query( array(
             'action'      => 'wpnc_download_proxy',
             'path'        => $path,
-            '_wpnc_token' => self::generate_download_token( $path ),
+            'scope'       => $scope,
+            '_wpnc_token' => self::generate_download_token( $path, $scope ),
         ), '', '&', PHP_QUERY_RFC3986 );
     }
 
