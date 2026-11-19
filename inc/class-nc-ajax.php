@@ -666,6 +666,20 @@ class NC_Ajax {
         ), '', '&', PHP_QUERY_RFC3986 );
     }
 
+    /**
+     * Build a nonce-protected download-proxy URL for administrators.
+     *
+     * @param string $path  Remote file path.
+     * @return string
+     */
+    public static function admin_download_url( string $path ): string {
+        return admin_url( 'admin-ajax.php' ) . '?' . http_build_query( array(
+            'action' => 'wpnc_download_proxy',
+            'path'   => sanitize_text_field( ltrim( $path, '/' ) ),
+            '_nonce' => wp_create_nonce( self::NONCE_ACTION ),
+        ), '', '&', PHP_QUERY_RFC3986 );
+    }
+
     /* ================================================================
      *  BROWSE SCOPE (for read-only / public browsing)
      * ============================================================= */
@@ -688,16 +702,26 @@ class NC_Ajax {
     }
 
     /**
+     * Whether $path contains no `.` / `..` segments (no traversal).
+     */
+    public static function is_safe_path( string $path ): bool {
+        foreach ( preg_split( '#[/\\\\]#', $path ) as $segment ) {
+            if ( $segment === '.' || $segment === '..' ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Whether $path equals $scope or lies below it (no traversal allowed).
      */
     private static function path_in_scope( string $path, string $scope ): bool {
         $path  = trim( $path, '/' );
         $scope = trim( $scope, '/' );
 
-        foreach ( preg_split( '#[/\\\\]#', $path ) as $segment ) {
-            if ( $segment === '.' || $segment === '..' ) {
-                return false;
-            }
+        if ( ! self::is_safe_path( $path ) ) {
+            return false;
         }
 
         if ( $scope === '' ) {
